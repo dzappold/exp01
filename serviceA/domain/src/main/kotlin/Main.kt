@@ -69,16 +69,22 @@ class WriteModel(private val eventStore: EventStore, private val messageBus: Mes
 
 class ReadModel(messageBus: MessageBus) {
     private val history = mutableListOf<ToyEvent>()
+
+    private var currentToysProjection = emptyList<String>()
+    private var toysEverSeen = emptyList<String>()
+
     init {
         messageBus.subscribe(this::handle)
     }
 
     private fun handle(event: ToyEvent) {
         history.add(event)
+        currentToysProjection = updateCurrentToys()
+        toysEverSeen = history.filterIsInstance<ToyAdded>().map { it.toy.name }.distinct()
     }
 
-    fun currentToys(): List<String> {
-        return history
+    private fun updateCurrentToys(): List<String> =
+        history
             .fold(mapOf<ToyId, Toy>()) { state, event ->
                 when (event) {
                     is ToyAdded -> state + (event.id to event.toy)
@@ -87,11 +93,11 @@ class ReadModel(messageBus: MessageBus) {
             }
             .values
             .map(Toy::name)
-    }
 
-    fun toysEverSeen(): List<String> {
-        return history.filterIsInstance<ToyAdded>().map { it.toy.name }
-    }
+    fun currentToys(): List<String> = currentToysProjection
+
+
+    fun toysEverSeen(): List<String> = toysEverSeen
 }
 
 fun main() {
