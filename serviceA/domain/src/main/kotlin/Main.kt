@@ -20,8 +20,31 @@ data class ToyRemoved(val id: ToyId) : ToyEvent()
 
 class EventStore {
     private val events = mutableListOf<ToyEvent>()
-    val eventStream: List<ToyEvent>
-        get() = events.toList()
+    // TODO: store is later on used for replays and other things
+
+    fun add(event: ToyEvent) {
+        events.add(event)
+    }
+}
+
+class MessageBus {
+    private val subscribers = mutableListOf<(ToyEvent) -> Unit>()
+
+    fun subscribe(subscriber: (ToyEvent) -> Unit) {
+        subscribers += subscriber
+    }
+
+    fun publish(event: ToyEvent) {
+        subscribers.forEach { subscriber ->
+            subscriber(event)
+        }
+    }
+}
+
+class WriteModel(private val eventStore: EventStore, private val messageBus: MessageBus) {
+    fun execute(command: ToyCommand) {
+        handleCommand(command)
+    }
 
     fun handleCommand(command: ToyCommand) {
         when (command) {
@@ -31,23 +54,31 @@ class EventStore {
     }
 
     private fun handleAddToy(command: AddToy) {
-        events.add(ToyAdded(command.id, command.toy))
+        ToyAdded(command.id, command.toy)
+            .also(eventStore::add)
+            .also(messageBus::publish)
     }
 
     private fun handleRemoveToy(command: RemoveToy) {
-        events.add(ToyRemoved(command.id))
+        ToyRemoved(command.id)
+            .also(eventStore::add)
+            .also(messageBus::publish)
     }
+
 }
 
-class WriteModel(private val eventStore: EventStore) {
-    fun execute(command: ToyCommand) {
-        eventStore.handleCommand(command)
+class ReadModel(messageBus: MessageBus) {
+    private val history = mutableListOf<ToyEvent>()
+    init {
+        messageBus.subscribe(this::handle)
     }
-}
 
-class ReadModel(private val eventStore: EventStore) {
+    private fun handle(event: ToyEvent) {
+        history.add(event)
+    }
+
     fun currentToys(): List<String> {
-        return eventStore.eventStream
+        return history
             .fold(mapOf<ToyId, Toy>()) { state, event ->
                 when (event) {
                     is ToyAdded -> state + (event.id to event.toy)
@@ -59,24 +90,28 @@ class ReadModel(private val eventStore: EventStore) {
     }
 
     fun toysEverSeen(): List<String> {
-        return eventStore.eventStream.filterIsInstance<ToyAdded>().map { it.toy.name }
+        return history.filterIsInstance<ToyAdded>().map { it.toy.name }
     }
 }
 
 fun main() {
+    val messageBus = MessageBus()
     val eventStore = EventStore()
-    val commandHandler = WriteModel(eventStore)
+    val commandHandler = WriteModel(eventStore, messageBus)
+    val readModel = ReadModel(messageBus)
 
     with(commandHandler) {
         execute(AddToy(ToyId(1), Toy("3D Toy")))
         execute(AddToy(ToyId(2), Toy("4D Toy")))
+
         execute(RemoveToy(ToyId(1)))
+
         execute(AddToy(ToyId(3), Toy("car")))
         execute(AddToy(ToyId(4), Toy("bear")))
+
         execute(RemoveToy(ToyId(3)))
     }
 
-    val readModel = ReadModel(eventStore)
     println("Toys ever seen: ${readModel.toysEverSeen()}")
     println("Current Toys: ${readModel.currentToys()}")
 }
