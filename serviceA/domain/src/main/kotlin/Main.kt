@@ -47,31 +47,6 @@ class WriteModel(private val eventStore: EventStore) {
 
 class ReadModel(private val eventStore: EventStore) {
     fun currentToys(): List<String> {
-        val eventStream = mutableMapOf<ToyId, Toy>()
-        eventStore.eventStream
-            .forEach { toyEvent ->
-                when (toyEvent) {
-                    is ToyAdded -> eventStream[toyEvent.id] = toyEvent.toy
-                    is ToyRemoved -> eventStream.remove(toyEvent.id)
-                }
-            }
-
-        return eventStream.values.map { it.name }
-    }
-
-    fun currentToysUsingFold(): List<String> {
-        return eventStore.eventStream
-            .fold(mutableMapOf<ToyId, Toy>()) { state, event ->
-                when (event) {
-                    is ToyAdded -> state[event.id] = event.toy
-                    is ToyRemoved -> state.remove(event.id)
-                }
-                state
-            }
-            .values.map(Toy::name)
-    }
-
-    fun currentToys2(): List<String> {
         return eventStore.eventStream
             .fold(mapOf<ToyId, Toy>()) { state, event ->
                 when (event) {
@@ -104,6 +79,4 @@ fun main() {
     val readModel = ReadModel(eventStore)
     println("Toys ever seen: ${readModel.toysEverSeen()}")
     println("Current Toys: ${readModel.currentToys()}")
-    println("Current Toys: ${readModel.currentToysUsingFold()}")
-    println("Current Toys: ${readModel.currentToys2()}")
 }
